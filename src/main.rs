@@ -1,117 +1,64 @@
+use std::io;
+use std::io::Write;
+
 mod db;
-
-use db::*;
-
-fn clr() {
-    // This escape code clears the terminal screen
-    print!("\x1B[2J\x1B[1;1H");
-}
+use db::{init_database, read_passwords_from_db, search_service_by_name, update_entry, delete_from_db};
 
 fn main() {
-    let conn = init_database().expect("Failed to initialize the database");
-    clr();
-
-    let ascii = r#"
-    
-░▒▓███████▓▒░ ░▒▓██████▓▒░ ░▒▓███████▓▒░▒▓███████▓▒░      ░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░   ░▒▓████████▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░             ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▒░              ░▒▓█▓▒▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     
-░▒▓███████▓▒░░▒▓████████▓▒░░▒▓██████▓▒░░▒▓██████▓▒░        ░▒▓█▓▒▒▓█▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░     ░▒▓█▓▒░        ░▒▓█▓▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░     ░▒▓█▓▒░        ░▒▓█▓▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░     
-░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░▒▓███████▓▒░          ░▒▓██▓▒░  ░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░░▒▓████████▓▒░▒▓█▓▒░     
-    "#;
-
-    println!("{}", ascii);
+    let conn = init_database().expect("Failed to initialize the database.");
 
     loop {
-        println!("Password manager menu:");
-        println!("1. Add Entry");
-        println!("2. List Entries");
-        println!("3. Search Entry");
-        println!("4. Delete");
-        println!("5. Update Entry");
-        println!("6. Exit Now");
+        println!("Password Manager");
+        println!("1. Add new entry");
+        println!("2. List all entries");
+        println!("3. Search for a service");
+        println!("4. Update an entry");
+        println!("5. Delete an entry");
+        println!("6. Exit");
 
-        let mut choice = String::new();
-        std::io::stdin().read_line(&mut choice).unwrap();
-
-        match choice.trim() {
+        let choice = prompt("Enter your choice: ");
+        match choice.as_str() {
             "1" => {
-                clr();
-                let entry = ServiceInfo::new(
-                    prompt("Service: "),
-                    prompt("Username: "),
-                    prompt("Password: "),
-                );
-
-                write_password_to_db(
-                    &conn,
-                    &entry.service,
-                    &entry.username,
-                    &entry.password
-                )
-                .expect("Failed to write to the database");
-
-                println!("Entry added successfully.");
+                let service = prompt("Service: ");
+                let username = prompt("Username: ");
+                let password = prompt("Password: ");
+                db::write_password_to_db(&conn, &service, &username, &password).expect("Failed to add entry.");
             }
-
             "2" => {
-                clr();
-                let services = read_passwords_from_db(&conn).unwrap_or_else(|err| {
-                    eprintln!("Error reading passwords: {}", err);
-                    Vec::new()
-                });
-
-                for item in &services {
-                    println!(
-                        "Service: {}\n- Username: {}\n- Password: {}",
-                        item.service, item.username, item.password
-                    );
+                let entries = read_passwords_from_db(&conn).expect("Failed to read entries.");
+                for entry in entries {
+                    println!("{:?}", entry);
                 }
             }
-
             "3" => {
-                clr();
-                let search = prompt("Search: ");
-
-                match search_service_by_name(&conn, &search) {
-                    Ok(Some(entry)) => {
-                        println!(
-                            "Service: {}\n- Username: {}\n- Password: {}",
-                            entry.service, entry.username, entry.password
-                        );
-                    }
-                    Ok(None) => println!("Service not found."),
-                    Err(err) => eprintln!("Error while searching service: {}", err),
+                let service = prompt("Service: ");
+                match search_service_by_name(&conn, &service).expect("Failed to search service.") {
+                    Some(entry) => println!("{:?}", entry),
+                    None => println!("Service not found."),
                 }
             }
-
-            // "4" => {
-            //     clr();
-            //     match delete_from_file() {
-            //         Ok(_) => println!("Service deleted successfully."),
-            //         Err(e) => eprintln!("Error deleting service: {}", e),
-            //     }
-            // }
-
-            // "5" => {
-            //     clr();
-            //     match update_entry() {
-            //         Ok(_) => println!("Service updated successfully."),
-            //         Err(e) => eprintln!("Error updating service: {}", e),
-            //     }
-            // }
-
-            "6" => {
-                clr();
-                println!("Feel Free to Try Again Later");
-                break;
+            "4" => {
+                let id: i64 = prompt("Entry ID to update: ").parse().expect("Invalid ID.");
+                let new_service = Some(prompt("New Service: "));
+                let new_username = Some(prompt("New Username: "));
+                let new_password = Some(prompt("New Password: "));
+                update_entry(&conn, id, new_service.as_deref(), new_username.as_deref(), new_password.as_deref())
+                    .expect("Failed to update entry.");
             }
-
-            _ => println!("Please Use Option 1, 2, 3, 4, 5, or 6."),
+            "5" => {
+                let id: i64 = prompt("Entry ID to delete: ").parse().expect("Invalid ID.");
+                delete_from_db(&conn, id).expect("Failed to delete entry.");
+            }
+            "6" => break,
+            _ => println!("Invalid choice, please try again."),
         }
-
-        println!("\n\n");
     }
+}
+
+pub fn prompt(prompt: &str) -> String {
+    print!("{}", prompt);
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).expect("Failed to read input");
+    input.trim().to_string()
 }
